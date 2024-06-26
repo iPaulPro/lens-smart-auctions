@@ -1,0 +1,14 @@
+{
+  "name": "lens-smart-auctions",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "packages/*"
+    ]
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
