@@ -8,7 +8,7 @@ import {
   ModuleRegistry,
   TestToken,
 } from "../typechain-types";
-import getNextContractAddress from "../lib/get-next-contract-address";
+import getNextContractAddress from "../lib/getNextContractAddress";
 import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { encodeBytes32String, ZeroAddress } from "ethers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
@@ -248,7 +248,7 @@ describe("AuctionCollectAction", () => {
     expect(auctionData.tokenData.royalty).to.equal(tokenRoyalties);
   });
 
-  it("First bidder should be winner", async () => {
+  it("Should save first bidder as winner", async () => {
     await initialize();
 
     const amount = ethers.parseEther("0.001");
@@ -284,10 +284,10 @@ describe("AuctionCollectAction", () => {
 
     // Ensure the bidder is now the winner
     const auctionData = await auctionAction.getAuctionData(PROFILE_ID, PUBLICATION_ID);
-    expect(auctionData.winnerProfileId).to.equal(FIRST_BIDDER_PROFILE_ID);
+    expect(auctionData.winner.profileId).to.equal(FIRST_BIDDER_PROFILE_ID);
   });
 
-  it("Valid higher bidder is winner", async () => {
+  it("Should consider higher valid bidder as winner", async () => {
     await initialize();
 
     const firstData = ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [ethers.parseEther("0.001")]);
@@ -335,10 +335,10 @@ describe("AuctionCollectAction", () => {
 
     // Ensure the bidder is now the winner
     const auctionData = await auctionAction.getAuctionData(PROFILE_ID, PUBLICATION_ID);
-    expect(auctionData.winnerProfileId).to.equal(SECOND_BIDDER_PROFILE_ID);
+    expect(auctionData.winner.profileId).to.equal(SECOND_BIDDER_PROFILE_ID);
   });
 
-  it("Bid less than current winner is insufficient", async () => {
+  it("Should consider bid lower than current winning bid as invalid", async () => {
     await initialize();
 
     const firstData = ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [ethers.parseEther("0.01")]);
@@ -373,7 +373,7 @@ describe("AuctionCollectAction", () => {
     await expect(secondTx).to.revertedWithCustomError(auctionAction, "InsufficientBidAmount");
   });
 
-  it("Bid less than minimum increment is insufficient", async () => {
+  it("Should consider bid lower than minimum increment as invalid", async () => {
     await initialize();
 
     const firstData = ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [ethers.parseEther("0.001")]);
@@ -408,7 +408,7 @@ describe("AuctionCollectAction", () => {
     await expect(secondTx).to.revertedWithCustomError(auctionAction, "InsufficientBidAmount");
   });
 
-  it("Winner can claim after auction ends", async () => {
+  it("Should allow winner to claim after auction ends", async () => {
     await initialize();
 
     const amount = ethers.parseEther("0.001");
@@ -442,7 +442,7 @@ describe("AuctionCollectAction", () => {
     expect(auctionData.endTimestamp).not.to.equal(0);
   });
 
-  it("Winner is Collect NFT contract owner after deployment", async () => {
+  it("Should transfer ownership of Collect NFT contract to author after deployment", async () => {
     await initialize();
 
     const amount = ethers.parseEther("0.001");
@@ -469,7 +469,7 @@ describe("AuctionCollectAction", () => {
     expect(await contractInstance.owner()).to.equal(authorAddress);
   });
 
-  it("Winner cannot claim before auction ends", async () => {
+  it("Should not allow claim before auction ends", async () => {
     await initialize();
 
     const amount = ethers.parseEther("0.001");
@@ -516,7 +516,7 @@ describe("AuctionCollectAction", () => {
 
     // Ensure the bidder is now the winner
     const auctionData = await auctionAction.getAuctionData(PROFILE_ID, PUBLICATION_ID);
-    expect(auctionData.winnerProfileId).to.equal(SECOND_BIDDER_PROFILE_ID);
+    expect(auctionData.winner.profileId).to.equal(SECOND_BIDDER_PROFILE_ID);
 
     const claimTxDone = auctionAction.claim(PROFILE_ID, PUBLICATION_ID);
     await expect(claimTxDone)
@@ -524,7 +524,7 @@ describe("AuctionCollectAction", () => {
       .withArgs(PROFILE_ID, PUBLICATION_ID, SECOND_BIDDER_PROFILE_ID, secondBidderAddress, anyValue, 1, anyValue);
   });
 
-  it("Bid cannot be placed before auction start time", async () => {
+  it("Should not allow bid to be placed before auction start time", async () => {
     const latestTimestamp = await getLatestBlockTimestamp();
 
     //set time now + 120 seconds
@@ -553,7 +553,7 @@ describe("AuctionCollectAction", () => {
     await expect(toEarlyBidTx).to.revertedWithCustomError(auctionAction, "UnavailableAuction");
   });
 
-  it("Bid can be placed after auction start time", async () => {
+  it("Should allow bid to be placed after auction start time", async () => {
     const latestTimestamp = await getLatestBlockTimestamp();
 
     //set time now + 120 seconds
@@ -587,7 +587,7 @@ describe("AuctionCollectAction", () => {
     await expect(onTimeBid).to.emit(auctionAction, "BidPlaced");
   });
 
-  it("Auction is extended by minTimeAfterBid after last minute bids", async () => {
+  it("Should extend auction by minTimeAfterBid after bids near auction end", async () => {
     const minTimeAfterBid = 30;
 
     await initialize({
@@ -641,7 +641,7 @@ describe("AuctionCollectAction", () => {
     expect(auctionData.endTimestamp).to.equal(secondBidBlock.timestamp + minTimeAfterBid);
   });
 
-  it("Reserve price is met", async () => {
+  it("Should allow bids if reserve price is met", async () => {
     await initialize({
       reservePrice: ethers.parseEther("1"),
     });
@@ -677,10 +677,10 @@ describe("AuctionCollectAction", () => {
 
     // Ensure the bidder is now the winner
     const auctionData = await auctionAction.getAuctionData(PROFILE_ID, PUBLICATION_ID);
-    expect(auctionData.winnerProfileId).to.equal(FIRST_BIDDER_PROFILE_ID);
+    expect(auctionData.winner.profileId).to.equal(FIRST_BIDDER_PROFILE_ID);
   });
 
-  it("Reserve price is not met", async () => {
+  it("Should reject bids if reserve price is not met", async () => {
     await initialize({
       reservePrice: ethers.parseEther("1"),
     });
@@ -703,7 +703,7 @@ describe("AuctionCollectAction", () => {
     await expect(tx).to.revertedWithCustomError(auctionAction, "InsufficientBidAmount");
   });
 
-  it("Referral fee is paid to referrer", async () => {
+  it("Should ensure referral fee is paid to referrer", async () => {
     const referrerStartingBalance = await testToken.balanceOf(secondBidderAddress);
 
     await initialize({
@@ -738,7 +738,7 @@ describe("AuctionCollectAction", () => {
     expect(referrerBalance).to.equal(referrerStartingBalance + adjustedAmount / 10n);
   });
 
-  it("Winner receives Collect NFT when claiming", async () => {
+  it("Should transfer Collect NFT when claimed by winner", async () => {
     await initialize();
 
     const amount = ethers.parseEther("0.001");
@@ -773,7 +773,7 @@ describe("AuctionCollectAction", () => {
     expect(balance).to.equal(1);
   });
 
-  it("Recipients receive their share of the winning bid on claim", async () => {
+  it("Should transfer shares of the winning bid to recipients on claim", async () => {
     const authorStartingBalance = await testToken.balanceOf(authorAddress);
     const recipientStartingBalance = await testToken.balanceOf(secondBidderAddress);
 
@@ -816,7 +816,7 @@ describe("AuctionCollectAction", () => {
     expect(recipientBalance).to.equal(recipientStartingBalance + adjustedAmount / 2n);
   });
 
-  it("Old winner receives bid back when outbid", async () => {
+  it("Should return bids to previous winner when outbid", async () => {
     await initialize();
 
     const initialBalance = await testToken.balanceOf(firstBidderAddress);
@@ -862,7 +862,7 @@ describe("AuctionCollectAction", () => {
     expect(endBalance).to.equal(initialBalance);
   });
 
-  it("Can't bid in follower-only auctions if not following", async () => {
+  it("Should prevent bids in follower-only auctions if bidder is not following author", async () => {
     await initialize({
       onlyFollowers: true,
     });
@@ -885,7 +885,7 @@ describe("AuctionCollectAction", () => {
     await expect(tx).to.revertedWithCustomError(auctionAction, "NotFollowing");
   });
 
-  it("Followers can bid in follower-only auctions", async () => {
+  it("Should allow bids in follower-only auctions if bidder is following author", async () => {
     await initialize({
       onlyFollowers: true,
     });

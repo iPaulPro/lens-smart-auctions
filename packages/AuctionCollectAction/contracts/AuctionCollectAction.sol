@@ -19,6 +19,17 @@ import {ICustomCollectNFT} from "./interfaces/ICustomCollectNFT.sol";
 import {ILensProtocol} from "lens-modules/contracts/interfaces/ILensProtocol.sol";
 
 /**
+ * @notice A struct containing winner data.
+ *
+ * @param profileId The token ID of the profile that is winning the auction.
+ * @param transactionExecutor The address of the bid transaction executor.
+ */
+struct Winner {
+    uint256 profileId;
+    address transactionExecutor;
+}
+
+/**
  * @notice A struct containing recipient data.
  *
  * @param recipient The recipient of the a % of auction's winner bid amount.
@@ -57,7 +68,7 @@ struct TokenData {
  * @param referralFee The percentage of the fee that will be transferred to the referrer in case of having one.
  * Measured in basis points, each basis point represents 0.01%.
  * @param currency The currency in which the bids are denominated.
- * @param winnerProfileId The current auction winner's profile ID.
+ * @param winner The current auction winner.
  * @param onlyFollowers Indicates whether followers are the only allowed to bid, and collect, or not.
  * @param collected Indicates whether the publication has been collected or not.
  * @param feeProcessed Indicates whether the auction fee was already processed or not.
@@ -74,7 +85,7 @@ struct AuctionData {
     uint256 winningBid;
     uint16 referralFee;
     address currency;
-    uint256 winnerProfileId;
+    Winner winner;
     bool onlyFollowers;
     bool collected;
     bool feeProcessed;
@@ -501,10 +512,10 @@ contract AuctionCollectAction is
             revert CollectAlreadyProcessed();
         }
 
-        uint256 winnerProfileId = _auctionDataByPubByProfile[
-            collectedProfileId
-        ][collectedPubId].winnerProfileId;
-        address winnerAddress = IERC721(PROFILE_NFT).ownerOf(winnerProfileId);
+        Winner storage winner = _auctionDataByPubByProfile[collectedProfileId][
+            collectedPubId
+        ].winner;
+        address winnerAddress = IERC721(PROFILE_NFT).ownerOf(winner.profileId);
 
         address collectNFT = _getOrDeployCollectNFT({
             publicationCollectedProfileId: collectedProfileId,
@@ -525,7 +536,7 @@ contract AuctionCollectAction is
         emit Collected({
             collectedProfileId: collectedProfileId,
             collectedPubId: collectedPubId,
-            collectorProfileId: winnerProfileId,
+            collectorProfileId: winner.profileId,
             nftRecipient: winnerAddress,
             collectNFT: collectNFT,
             tokenId: tokenId,
@@ -605,7 +616,7 @@ contract AuctionCollectAction is
         _auctionDataByPubByProfile[profileId][pubId].feeProcessed = true;
         uint256[] storage referrerProfileIds = _referrerProfileIdByPubByProfile[
             profileId
-        ][pubId][_auctionDataByPubByProfile[profileId][pubId].winnerProfileId];
+        ][pubId][_auctionDataByPubByProfile[profileId][pubId].winner.profileId];
 
         RecipientData[] memory recipients = _recipientsByPublicationByProfile[
             profileId
@@ -748,7 +759,7 @@ contract AuctionCollectAction is
      * @param pubId The publication ID associated with the underlying publication.
      * @param referrerProfileIds The token IDs of the referrers' profiles.
      * @param amount The bid amount to offer.
-     * @param bidderOwner The owner's address of the bidder profile.
+     * @param bidderProfileOwner The address of the bidder profile owner.
      * @param bidderProfileId The token ID of the bidder profile
      * @param bidderTransactionExecutor The address executing the bid
      */
@@ -757,7 +768,7 @@ contract AuctionCollectAction is
         uint256 pubId,
         uint256[] memory referrerProfileIds,
         uint256 amount,
-        address bidderOwner,
+        address bidderProfileOwner,
         uint256 bidderProfileId,
         address bidderTransactionExecutor
     ) internal {
@@ -771,19 +782,20 @@ contract AuctionCollectAction is
             referrerProfileIds,
             bidderProfileId
         );
+        Winner memory newWinner = Winner({
+            profileId: bidderProfileId,
+            transactionExecutor: bidderTransactionExecutor
+        });
         uint256 endTimestamp = _setNewAuctionStorageStateAfterBid(
             profileId,
             pubId,
             amount,
-            bidderProfileId,
+            newWinner,
             auction
         );
-        if (auction.winnerProfileId != 0) {
-            address winnerAddress = IERC721(PROFILE_NFT).ownerOf(
-                auction.winnerProfileId
-            );
+        if (auction.winner.profileId != 0) {
             IERC20(auction.currency).safeTransfer(
-                winnerAddress,
+                auction.winner.transactionExecutor,
                 auction.winningBid
             );
         }
@@ -797,7 +809,7 @@ contract AuctionCollectAction is
             pubId,
             _referrerProfileIdByPubByProfile[profileId][pubId][bidderProfileId],
             amount,
-            bidderOwner,
+            bidderProfileOwner,
             bidderProfileId,
             bidderTransactionExecutor,
             endTimestamp,
@@ -859,7 +871,7 @@ contract AuctionCollectAction is
      * @param profileId The token ID of the profile associated with the underlying publication.
      * @param pubId The publication ID associated with the underlying publication.
      * @param newWinningBid The amount of the new winning bid.
-     * @param newWinnerProfileId The new winning bidder.
+     * @param newWinner The new winning bidder.
      * @param prevAuctionState The state of the auction data before the bid, which will be overrided.
      *
      * @return A UNIX timestamp representing the `endTimestamp` of the new auction state.
@@ -868,16 +880,16 @@ contract AuctionCollectAction is
         uint256 profileId,
         uint256 pubId,
         uint256 newWinningBid,
-        uint256 newWinnerProfileId,
+        Winner memory newWinner,
         AuctionData memory prevAuctionState
     ) internal returns (uint256) {
         AuctionData storage nextAuctionState = _auctionDataByPubByProfile[
             profileId
         ][pubId];
-        nextAuctionState.winnerProfileId = newWinnerProfileId;
+        nextAuctionState.winner = newWinner;
         nextAuctionState.winningBid = newWinningBid;
         uint256 endTimestamp = prevAuctionState.endTimestamp;
-        if (prevAuctionState.winnerProfileId == 0) {
+        if (prevAuctionState.winner.profileId == 0) {
             endTimestamp = block.timestamp + prevAuctionState.duration;
             nextAuctionState.endTimestamp = uint64(endTimestamp);
             nextAuctionState.startTimestamp = uint64(block.timestamp);
@@ -928,7 +940,7 @@ contract AuctionCollectAction is
         AuctionData memory auction,
         uint256 amount
     ) internal pure {
-        bool auctionStartsWithCurrentBid = auction.winnerProfileId == 0;
+        bool auctionStartsWithCurrentBid = auction.winner.profileId == 0;
         if (
             (auctionStartsWithCurrentBid && amount < auction.reservePrice) ||
             (!auctionStartsWithCurrentBid &&

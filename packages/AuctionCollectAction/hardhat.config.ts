@@ -42,9 +42,7 @@ const config: HardhatUserConfig = {
     },
   },
   dependencyCompiler: {
-    paths: [
-      "lens-modules/contracts/misc/ModuleRegistry.sol",
-    ],
+    paths: ["lens-modules/contracts/misc/ModuleRegistry.sol"],
   },
   defaultNetwork: "localhost",
   namedAccounts: {

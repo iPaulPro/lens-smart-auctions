@@ -1,6 +1,6 @@
 {
   "name": "AuctionCollectAction",
-  "version": "1.0.2",
+  "version": "1.0.1",
   "scripts": {
     "compile": "hardhat compile --show-stack-traces",
     "lint": "eslint --config ./.eslintrc.json --ignore-path ./.eslintignore ./*.ts ./deploy/**/*.ts ./scripts/**/*.ts ./test/**/*.ts",
